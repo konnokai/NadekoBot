@@ -19,15 +19,16 @@ public partial class Gambling : GamblingModule<GamblingService>
         {
             _httpClientFactory = httpClientFactory;
             _muteRebornService = muteRebornService;
-
-            client.SelectMenuExecuted += async (component) =>
+           
+            client.ButtonExecuted += async (component) =>
             {
                 if (component.HasResponded)
                     return;
 
                 if (component.Data.CustomId.StartsWith("uma_"))
                 {
-                    var umaGamblingData = _service.runningUmaGambling.FirstOrDefault((x) => x.UmaGuid == component.Data.CustomId);
+                    string guid = component.Data.CustomId.Split('_')[1];
+                    var umaGamblingData = _service.runningUmaGambling.FirstOrDefault((x) => x.UmaGuid.EndsWith(guid));
                     if (umaGamblingData != null && umaGamblingData.GamblingMessage.CreatedAt.AddMinutes(5) >= DateTimeOffset.UtcNow)
                     {
                         if (component.User.Id == umaGamblingData.GamblingUser.Id)
@@ -36,7 +37,7 @@ public partial class Gambling : GamblingModule<GamblingService>
                             return;
                         }
 
-                        string rank = component.Data.Values.First();
+                        string rank = component.Data.CustomId.Split('_')[2] == "first" ? "1" : "2";
                         if (umaGamblingData.SelectedRankDic.ContainsKey(component.User.Id))
                         {
                             umaGamblingData.SelectedRankDic[component.User.Id] = rank;
@@ -59,10 +60,10 @@ public partial class Gambling : GamblingModule<GamblingService>
                     else
                     {
                         await component.RespondAsync($"該賭局已結束或取消", ephemeral: true);
-                        await DisableSelectMenuAsync(component.Message);
+                        await DisableButtonAsync(component.Message);
                     }
                 }
-                else if (component.Data.CustomId == "umaend")
+                else if (component.Data.CustomId.StartsWith("umaend_"))
                 {
                     if (component.User is SocketGuildUser)
                     {
@@ -74,7 +75,7 @@ public partial class Gambling : GamblingModule<GamblingService>
                             if (jsonFile == null)
                             {
                                 await component.RespondAsync("缺少 `rank.json` 檔案", ephemeral: true);
-                                await DisableSelectMenuAsync(component.Message);
+                                await DisableButtonAsync(component.Message);
                                 return;
                             }
 
@@ -84,7 +85,7 @@ public partial class Gambling : GamblingModule<GamblingService>
                             var jsonText = await httpClient.GetStringAsync(jsonFile.Url);
                             var json = JsonSerializer.Deserialize<Dictionary<ulong, string>>(jsonText);
 
-                            string rank = component.Data.Values.First();
+                            string rank = component.Data.CustomId.Split('_')[1] == "first" ? "1" : "2";
                             string result = "";
                             foreach (var item in json)
                             {
@@ -96,7 +97,7 @@ public partial class Gambling : GamblingModule<GamblingService>
                             }
 
                             await component.FollowupAsync(embed: _eb.Create().WithOkColor().WithDescription(result).Build());
-                            await DisableSelectMenuAsync(component.Message);
+                            await DisableButtonAsync(component.Message);
                         }
                         else
                         {
@@ -144,14 +145,6 @@ public partial class Gambling : GamblingModule<GamblingService>
                 return;
 
             string umaGuid = "uma_" + Guid.NewGuid().ToString().Replace("-", "");
-            SelectMenuBuilder selectMenuBuilder = new SelectMenuBuilder()
-                .WithPlaceholder("選擇排名")
-                .WithMinValues(1)
-                .WithMaxValues(1)
-                .WithCustomId(umaGuid);
-
-            for (int i = 1; i <= 16; i++)
-                selectMenuBuilder.AddOption(i.ToString(), i.ToString());
 
             var message = await ctx.Channel.SendMessageAsync("<@&830033656159666178> 開賭啦",
                    embed: _eb.Create(ctx)
@@ -162,7 +155,8 @@ public partial class Gambling : GamblingModule<GamblingService>
                        .WithFooter("請在比賽結束後截圖排名，上傳截圖同時輸入 `~umaend` 以供管理員檢查")
                        .Build(),
                    components: new ComponentBuilder()
-                       .WithSelectMenu(selectMenuBuilder)
+                       .WithButton("第一名", $"{umaGuid}_first", ButtonStyle.Success)
+                       .WithButton("不是第一名", $"{umaGuid}_other", ButtonStyle.Danger)
                        .Build());
 
             var message2 = await message.ReplyAsync(
@@ -198,7 +192,7 @@ public partial class Gambling : GamblingModule<GamblingService>
                 {
                     if (act)
                     {
-                        await DisableSelectMenuAsync(umaGamblingData.GamblingMessage);
+                        await DisableButtonAsync(umaGamblingData.GamblingMessage);
                         _service.runningUmaGambling.Remove(umaGamblingData);
                     }
                     isCancel = true;
@@ -226,48 +220,32 @@ public partial class Gambling : GamblingModule<GamblingService>
             umaGamblingData.SelectedRankDic.Add(umaGamblingData.GamblingUser.Id, "0");
             using var stringStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(umaGamblingData.SelectedRankDic)));
 
-            SelectMenuBuilder selectMenuBuilder = new SelectMenuBuilder()
-                .WithPlaceholder("選擇排名")
-                .WithMinValues(1)
-                .WithMaxValues(1)
-                .WithCustomId("umaend");
-
-            for (int i = 1; i <= 16; i++)
-                selectMenuBuilder.AddOption(i.ToString(), i.ToString());
-
             await channel.SendFilesAsync(
                 attachments: new List<FileAttachment>() { new FileAttachment(imageStream, "rank.jpg"), new FileAttachment(stringStream, "rank.json") },
                 embed: _eb.Create(ctx)
-                .WithOkColor()
-                .WithTitle(umaGamblingData.GamblingUser.ToString() + " 的賭局排名選擇清單")
-                .WithDescription($"附加訊息: {umaGamblingData.AddMessage}\n\n" +
-                    Format.Url($"賭局連結", umaGamblingData.GamblingMessage.GetJumpUrl()))
-                .Build(),
-                   components: new ComponentBuilder()
-                       .WithSelectMenu(selectMenuBuilder)
-                       .Build());
+                    .WithOkColor()
+                    .WithTitle(umaGamblingData.GamblingUser.ToString() + " 的賭局排名選擇清單")
+                    .WithDescription($"附加訊息: {umaGamblingData.AddMessage}\n\n" +
+                        Format.Url($"賭局連結", umaGamblingData.GamblingMessage.GetJumpUrl()))
+                    .Build(),
+                components: new ComponentBuilder()
+                    .WithButton("第一名", $"umaend_first", ButtonStyle.Success)
+                    .WithButton("不是第一名", $"umaend_other", ButtonStyle.Danger)
+                    .Build());
 
-            await DisableSelectMenuAsync(umaGamblingData.GamblingMessage);
+            await DisableButtonAsync(umaGamblingData.GamblingMessage);
 
             _service.runningUmaGambling.Remove(umaGamblingData);
 
             await umaGamblingData.GamblingMessage.ReplyAsync(embed: _eb.Create().WithOkColor().WithDescription("已結束並封存本賭局").Build());
         }
 
-        private async Task DisableSelectMenuAsync(IUserMessage userMessage)
+        private async Task DisableButtonAsync(IUserMessage userMessage)
         {
-            SelectMenuBuilder selectMenuBuilder = new SelectMenuBuilder()
-                .WithPlaceholder("此賭局已結束")
-                .WithMinValues(1)
-                .WithMaxValues(1)
-                .AddOption("1", "2")
-                .WithCustomId("1234")
-                .WithDisabled(true);
-
             await userMessage.ModifyAsync((act) =>
             {
                 act.Components = new Optional<MessageComponent>(new ComponentBuilder()
-                    .WithSelectMenu(selectMenuBuilder)
+                    .WithButton("此賭局已結束", $"end", ButtonStyle.Primary, disabled: true)
                     .Build());
             });
         }
