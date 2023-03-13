@@ -15,4 +15,5 @@ public interface IEmbedBuilder
     IEmbedBuilder WithUrl(string url);
     IEmbedBuilder WithImageUrl(string url);
     IEmbedBuilder WithThumbnailUrl(string url);
+    IEmbedBuilder WithCurrentTimestamp();
 }

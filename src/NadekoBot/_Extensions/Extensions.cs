@@ -12,6 +12,8 @@ public static class Extensions
     private static readonly Regex _urlRegex =
         new(@"^(https?|ftp)://(?<path>[^\s/$.?#].[^\s]*)$", RegexOptions.Compiled);
 
+    public static Regex AttchUrlRegex = new(@"^https://cdn.discordapp.com/attachments/(?<path>[^\s/$.?#].[^\s]*)$", RegexOptions.Compiled);
+
     public static IEmbedBuilder WithAuthor(this IEmbedBuilder eb, IUser author)
         => eb.WithAuthor(author.ToString()!, author.RealAvatarUrl().ToString());
 
@@ -58,6 +60,18 @@ public static class Extensions
             return true;
         }
 
+        path = string.Empty;
+        return false;
+    }
+
+    public static bool TryGetAttachmentFilePath(this string input, out string path)
+    {
+        var match = AttchUrlRegex.Match(input);
+        if (match.Success)
+        {
+            path = match.Groups["path"].Value.Replace("/", "_").Replace("\\", "_");
+            return true;
+        }
         path = string.Empty;
         return false;
     }

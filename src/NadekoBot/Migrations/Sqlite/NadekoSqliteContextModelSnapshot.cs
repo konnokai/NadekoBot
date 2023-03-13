@@ -965,6 +965,9 @@ namespace NadekoBot.Migrations
                     b.Property<int>("BoostMessageDeleteAfter")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("BuyMuteRebornTicketCost")
+                        .HasColumnType("INTEGER");
+
                     b.Property<ulong>("ByeMessageChannelId")
                         .HasColumnType("INTEGER");
 
@@ -992,6 +995,15 @@ namespace NadekoBot.Migrations
                     b.Property<string>("DmGreetMessageText")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("EachTicketDecreaseMuteTime")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("EachTicketIncreaseMuteTime")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("EnableMuteReborn")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("ExclusiveSelfAssignedRoles")
                         .HasColumnType("INTEGER");
 
@@ -1015,6 +1027,9 @@ namespace NadekoBot.Migrations
 
                     b.Property<string>("Locale")
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("MaxIncreaseMuteTime")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("MuteRoleName")
                         .HasColumnType("TEXT");
@@ -1186,6 +1201,9 @@ namespace NadekoBot.Migrations
                     b.Property<ulong?>("MessageUpdatedId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<ulong?>("ReactionRemovedId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<ulong?>("UserBannedId")
                         .HasColumnType("INTEGER");
 
@@ -1284,6 +1302,9 @@ namespace NadekoBot.Migrations
                     b.Property<int?>("GuildConfigId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsHardMute")
+                        .HasColumnType("INTEGER");
+
                     b.Property<ulong>("UserId")
                         .HasColumnType("INTEGER");
 
@@ -1292,6 +1313,31 @@ namespace NadekoBot.Migrations
                     b.HasIndex("GuildConfigId");
 
                     b.ToTable("MutedUserId");
+                });
+
+            modelBuilder.Entity("NadekoBot.Services.Database.Models.MuteRebornTicket", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("DateAdded")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("GuildConfigId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("RebornTicketNum")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<ulong>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuildConfigId");
+
+                    b.ToTable("MuteRebornTicket");
                 });
 
             modelBuilder.Entity("NadekoBot.Services.Database.Models.NadekoExpression", b =>
@@ -1318,6 +1364,12 @@ namespace NadekoBot.Migrations
                     b.Property<ulong?>("GuildId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsRegex")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("OwnerOnly")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Reactions")
                         .HasColumnType("TEXT");
 
@@ -1326,6 +1378,9 @@ namespace NadekoBot.Migrations
 
                     b.Property<string>("Trigger")
                         .HasColumnType("TEXT");
+
+                    b.Property<ulong>("UseCount")
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -1995,6 +2050,9 @@ namespace NadekoBot.Migrations
                     b.Property<int?>("GuildConfigId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsHardMute")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime>("UnmuteAt")
                         .HasColumnType("TEXT");
 
@@ -2572,6 +2630,13 @@ namespace NadekoBot.Migrations
                         .HasForeignKey("GuildConfigId");
                 });
 
+            modelBuilder.Entity("NadekoBot.Services.Database.Models.MuteRebornTicket", b =>
+                {
+                    b.HasOne("NadekoBot.Services.Database.Models.GuildConfig", null)
+                        .WithMany("MuteRebornTickets")
+                        .HasForeignKey("GuildConfigId");
+                });
+
             modelBuilder.Entity("NadekoBot.Services.Database.Models.Permissionv2", b =>
                 {
                     b.HasOne("NadekoBot.Services.Database.Models.GuildConfig", null)
@@ -2823,6 +2888,8 @@ namespace NadekoBot.Migrations
                     b.Navigation("FollowedStreams");
 
                     b.Navigation("GenerateCurrencyChannelIds");
+
+                    b.Navigation("MuteRebornTickets");
 
                     b.Navigation("MutedUsers");
 

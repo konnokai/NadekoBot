@@ -16,6 +16,7 @@ public class LogSetting : DbEntity
     public ulong? UserUnbannedId { get; set; }
     public ulong? UserUpdatedId { get; set; }
 
+    public ulong? ReactionRemovedId { get; set; }
     public ulong? ChannelCreatedId { get; set; }
     public ulong? ChannelDestroyedId { get; set; }
     public ulong? ChannelUpdatedId { get; set; }

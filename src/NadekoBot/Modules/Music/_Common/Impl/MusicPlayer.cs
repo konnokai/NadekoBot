@@ -4,7 +4,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Nadeko.Common;
 
 namespace NadekoBot.Modules.Music;
 
@@ -21,7 +20,7 @@ public sealed class MusicPlayer : IMusicPlayer
     public int CurrentIndex
         => _queue.Index;
 
-    public float Volume { get; private set; } = 1.0f;
+    public float Volume { get; private set; } = 0.05f;
 
     private readonly AdjustVolumeDelegate _adjustVolume;
     private readonly VoiceClient _vc;

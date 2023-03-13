@@ -17,7 +17,7 @@ public class CommandHandler : INService, IReadyExecutor
     public event Func<CommandInfo, ITextChannel, string, Task> CommandErrored = delegate { return Task.CompletedTask; };
 
     //userid/msg count
-    public ConcurrentDictionary<ulong, uint> UserMessagesSent { get; } = new();
+    public ConcurrentDictionary<string, uint> UserMessagesSent { get; } = new();
 
     public ConcurrentHashSet<ulong> UsersOnShortCooldown { get; } = new();
 
@@ -218,7 +218,7 @@ public class CommandHandler : INService, IReadyExecutor
             {
 #if !GLOBAL_NADEKO
                 // track how many messages each user is sending
-                UserMessagesSent.AddOrUpdate(usrMsg.Author.Id, 1, (_, old) => ++old);
+                UserMessagesSent.AddOrUpdate(usrMsg.Author.Mention, 1, (_, old) => ++old);
 #endif
 
                 var channel = msg.Channel;
@@ -250,7 +250,7 @@ public class CommandHandler : INService, IReadyExecutor
         var messageContent = await _behaviorHandler.RunInputTransformersAsync(guild, usrMsg);
 
         var prefix = GetPrefix(guild?.Id);
-        var isPrefixCommand = messageContent.StartsWith(".prefix", StringComparison.InvariantCultureIgnoreCase);
+        var isPrefixCommand = messageContent.StartsWith("~prefix", StringComparison.InvariantCultureIgnoreCase);
         // execute the command and measure the time it took
         if (isPrefixCommand || messageContent.StartsWith(prefix, StringComparison.InvariantCulture))
         {

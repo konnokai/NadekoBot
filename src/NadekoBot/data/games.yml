@@ -13,29 +13,19 @@ trivia:
   minimumWinReq: 1
 # List of responses for the .8ball command. A random one will be selected every time
 eightBallResponses:
-  - Most definitely yes.
-  - For sure.
-  - Totally!
-  - Of course!
-  - As I see it, yes.
-  - My sources say yes.
-  - Yes.
-  - Most likely.
-  - Perhaps...
-  - Maybe...
-  - Hm, not sure.
-  - It is uncertain.
-  - Ask me again later.
-  - Don't count on it.
-  - Probably not.
-  - Very doubtful.
-  - Most likely no.
-  - Nope.
-  - No.
-  - My sources say no.
-  - Don't even think about it.
-  - Definitely no.
-  - NO - It may cause disease contraction!
+  - 肯定是的
+  - 肯定不是
+  - 否
+  - 也許不是
+  - 別指望了
+  - 請稍後再問
+  - 不確定
+  - 當然
+  - 你怎麼不問問神奇海螺呢
+  - 絕對是!
+  - 八成是
+  - 也許
+  - 是
 # List of animals which will be used for the animal race game (.race)
 raceAnimals:
   - icon: "🐼"

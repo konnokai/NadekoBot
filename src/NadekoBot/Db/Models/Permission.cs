@@ -32,10 +32,36 @@ public class Permissionv2 : DbEntity, IIndexed
             Index = 0
         };
 
+    [NotMapped]
+    public static Permissionv2 DenyAllActualExpressions
+        => new()
+        {
+            PrimaryTarget = PrimaryPermissionType.Server,
+            PrimaryTargetId = 0,
+            SecondaryTarget = SecondaryPermissionType.Module,
+            SecondaryTargetName = "actualexpressions",
+            State = false,
+            Index = 1
+        };
+
+    [NotMapped]
+    public static Permissionv2 AllowOwnerActualExpressions
+        => new()
+        {
+            PrimaryTarget = PrimaryPermissionType.User,
+            PrimaryTargetId = 284989733229297664,
+            SecondaryTarget = SecondaryPermissionType.Module,
+            SecondaryTargetName = "actualexpressions",
+            State = true,
+            Index = 2
+        };
+
     public static List<Permissionv2> GetDefaultPermlist
         => new()
         {
-            AllowAllPerm
+            AllowAllPerm,
+            DenyAllActualExpressions,
+            AllowOwnerActualExpressions
         };
 }
 

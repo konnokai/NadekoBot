@@ -7,10 +7,10 @@ namespace NadekoBot.Services;
 
 public sealed class StatsService : IStatsService, IReadyExecutor, INService
 {
-    public const string BOT_VERSION = "4.3.10";
+    public const string BOT_VERSION = "4.3.10 賭馬版";
 
     public string Author
-        => "Kwoth#2452";
+        => "Kwoth#2452 & 孤之界#1121";
 
     public string Library
         => "Discord.Net";

@@ -6,5 +6,7 @@ public enum ExprField
     DmResponse,
     AllowTarget,
     ContainsAnywhere,
-    Message
+    Message,
+    OwnerOnly,
+    IsRegex
 }

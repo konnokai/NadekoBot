@@ -263,7 +263,7 @@ public partial class Administration : NadekoModule<AdministrationService>
 
     [Cmd]
     [RequireContext(ContextType.Guild)]
-    [UserPerm(ChannelPerm.ManageMessages)]
+    [OwnerOnly]
     [Priority(0)]
     public Task Edit(ulong messageId, [Leftover] string text)
         => Edit((ITextChannel)ctx.Channel, messageId, text);

@@ -58,6 +58,9 @@ public sealed class DiscordEmbedBuilderWrapper : IEmbedBuilder
     public IEmbedBuilder WithThumbnailUrl(string url)
         => Wrap(embed.WithThumbnailUrl(url));
 
+    public IEmbedBuilder WithCurrentTimestamp()
+        => Wrap(embed.WithCurrentTimestamp());
+
     public IEmbedBuilder WithColor(EmbedColor color)
         => color switch
         {

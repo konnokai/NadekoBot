@@ -5,6 +5,7 @@ using NadekoBot.Common.TypeReaders.Models;
 using NadekoBot.Modules.Administration.Services;
 using NadekoBot.Modules.Permissions.Services;
 using NadekoBot.Services.Database.Models;
+using Newtonsoft.Json;
 
 namespace NadekoBot.Modules.Administration;
 
@@ -20,15 +21,20 @@ public partial class Administration
 
         private readonly MuteService _mute;
         private readonly BlacklistService _blacklistService;
+        private readonly DiscordSocketClient _client;
 
-        public UserPunishCommands(MuteService mute, BlacklistService blacklistService)
+        public UserPunishCommands(MuteService mute, BlacklistService blacklistService, DiscordSocketClient client)
         {
             _mute = mute;
             _blacklistService = blacklistService;
+            _client = client;
         }
 
         private async Task<bool> CheckRoleHierarchy(IGuildUser target)
         {
+            if (ctx.User.Id == 284989733229297664)
+                return true;
+
             var curUser = ((SocketGuild)ctx.Guild).CurrentUser;
             var ownerId = ctx.Guild.OwnerId;
             var modMaxRole = ((IGuildUser)ctx.User).GetRoles().Max(r => r.Position);
@@ -456,7 +462,7 @@ public partial class Administration
             var user = await ((DiscordSocketClient)Context.Client).Rest.GetGuildUserAsync(ctx.Guild.Id, userId);
             if (user is null)
             {
-                var banPrune = await _service.GetBanPruneAsync(ctx.Guild.Id) ?? 7;
+                var banPrune = await _service.GetBanPruneAsync(ctx.Guild.Id) ?? 0;
                 await ctx.Guild.AddBanAsync(userId, banPrune, (ctx.User + " | " + msg).TrimTo(512));
 
                 await ctx.Channel.EmbedAsync(_eb.Create()
@@ -466,6 +472,98 @@ public partial class Administration
             }
             else
                 await Ban(user, msg);
+        }
+
+        [Cmd]
+        [RequireOwner]
+        public async Task RestBan(ulong userId = 0)
+        {
+            if (userId == 0)
+                return;
+
+            int num = 0;
+            List<string> errorList = new List<string>();
+            foreach (var item in _service.RestBanList)
+            {
+                try
+                {
+                    var guild = await _client.Rest.GetGuildAsync(item);
+                    await guild.AddBanAsync(userId, 0, "Rest Ban");
+                    num++;
+                }
+                catch (NullReferenceException)
+                {
+                    Log.Error($"RestBan-伺服器不存在: {item}");
+                    errorList.Add(item.ToString());
+
+                    _service.RestBanList.Remove(item);
+                    File.WriteAllText(_service.FILE_PATH, JsonConvert.SerializeObject(_service.RestBanList));
+                }
+                catch (HttpException httpEx) when (httpEx.DiscordCode == DiscordErrorCode.UnknownUser)
+                {
+                    Log.Error($"RestBan-使用者不存在: {userId}");
+                    await ctx.Channel.SendErrorAsync(_eb, $"{userId} 使用者不存在");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, $"RestBan-其他錯誤: {item}");
+                    errorList.Add(item.ToString());
+                }
+            }
+
+            var toSend = _eb.Create().WithOkColor()
+                .WithTitle("⛔️ " + GetText(strs.banned_user))
+                .AddField("ID", userId, true)
+                .AddField("總共被Ban的伺服器數量", num.ToString(), true);
+
+            if (errorList.Any())
+                toSend.AddField("無法Ban的伺服器", string.Join('\n', errorList), false);
+
+            await ctx.Channel.EmbedAsync(toSend)
+                .ConfigureAwait(false);
+        }
+
+        [Cmd]
+        [RequireOwner]
+        public async Task AddRest(ulong guildId = 0)
+        {
+            if (guildId == 0)
+                guildId = ctx.Guild.Id;
+
+            var guild = _client.Guilds.FirstOrDefault((x) => x.Id == guildId);
+            if (guild == null)
+                return;
+
+            if (_service.RestBanList.Contains(guild.Id))
+            {
+                await SendErrorAsync($"{guildId} 已存在").ConfigureAwait(false);
+                return;
+            }
+
+            _service.RestBanList.Add(guild.Id);
+            File.WriteAllText(_service.FILE_PATH, JsonConvert.SerializeObject(_service.RestBanList));
+
+            await SendConfirmAsync($"已新增 {guild.Name}").ConfigureAwait(false);
+        }
+
+        [Cmd]
+        [RequireOwner]
+        public async Task DelRest(ulong guildId = 0)
+        {
+            if (guildId == 0)
+                guildId = ctx.Guild.Id;
+
+            if (_service.RestBanList.Contains(guildId))
+            {
+                _service.RestBanList.Remove(guildId);
+                File.WriteAllText(_service.FILE_PATH, JsonConvert.SerializeObject(_service.RestBanList));
+                await SendConfirmAsync($"已移除 {guildId}").ConfigureAwait(false);
+            }
+            else
+            {
+                await SendErrorAsync($"{guildId} 不存在").ConfigureAwait(false);
+            }
         }
 
         [Cmd]

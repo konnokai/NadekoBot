@@ -79,6 +79,28 @@ public partial class Utility
         }
 
         [Cmd]
+        public async Task RemindInstantNoodles(string time = "3")
+        {
+            if (int.TryParse(time, out int intTime))
+            {
+                if (intTime > 10 || intTime < 2)
+                {
+                    await ctx.Channel.SendErrorAsync(_eb, "時間錯誤，只能設定2~10分鐘").ConfigureAwait(false);
+                }
+                else
+                {
+                    bool isPrivate = ctx.Guild == null;
+                    ulong target = isPrivate ? ctx.User.Id : ctx.Channel.Id;
+                    await RemindInternal(target, isPrivate, new TimeSpan(0, intTime, 0), ctx.User.Mention + "該吃泡麵囉！").ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                await ctx.Channel.SendErrorAsync(_eb, "時間錯誤，請輸入數字").ConfigureAwait(false);
+            }
+        }
+
+        [Cmd]
         [RequireContext(ContextType.Guild)]
         [UserPerm(GuildPerm.Administrator)]
         [Priority(0)]
@@ -119,8 +141,8 @@ public partial class Utility
                         $"#{++i + (page * 10)} {rem.When:HH:mm yyyy-MM-dd} UTC "
                         + $"(in {diff.Humanize(2, minUnit: TimeUnit.Minute, culture: Culture)})",
                         $@"`Target:` {(rem.IsPrivate ? "DM" : "Channel")}
-`TargetId:` {rem.ChannelId}
-`Message:` {rem.Message?.TrimTo(50)}");
+                        `TargetId:` {rem.ChannelId}
+                        `Message:` {rem.Message?.TrimTo(50)}");
                 }
             }
             else
@@ -177,7 +199,7 @@ public partial class Utility
         {
             var time = DateTime.UtcNow + ts;
 
-            if (ts > TimeSpan.FromDays(60))
+            if (ts > TimeSpan.FromDays(90))
                 return false;
 
             if (ctx.Guild is not null)
@@ -209,7 +231,7 @@ public partial class Utility
                 await SendConfirmAsync("⏰ "
                                        + GetText(strs.remind(
                                            Format.Bold(!isPrivate ? $"<#{targetId}>" : ctx.User.Username),
-                                           Format.Bold(message),
+                                           message,
                                            ts.Humanize(3, minUnit: TimeUnit.Second, culture: Culture),
                                            gTime,
                                            gTime)));

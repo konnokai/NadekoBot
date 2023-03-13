@@ -3,9 +3,9 @@ version: 6
 # Currency settings
 currency:
 # What is the emoji/character which represents the currency
-  sign: "🌸"
+  sign: "🪶" 
   # What is the name of the currency
-  name: Nadeko Flower
+  name: 羽毛
   # For how long will the transactions be kept in the database (curtrs)
   # Set 0 to disable cleanup (keep transactions forever)
   transactionsLifetime: 0
@@ -17,7 +17,7 @@ maxBet: 0
 # Settings for betflip command
 betFlip:
 # Bet multiplier if user guesses correctly
-  multiplier: 1.95
+  multiplier: 2
 # Settings for betroll command
 betRoll:
 # When betroll is played, user will roll a number 0-100.
@@ -39,20 +39,20 @@ generation:
   # Every message sent has a certain % chance to generate the currency
   # specify the percentage here (1 being 100%, 0 being 0% - for example
   # default is 0.02, which is 2%
-  chance: 0.02
+  chance: 0.05
   # How many seconds have to pass for the next message to have a chance to spawn currency
-  genCooldown: 10
+  genCooldown: 300
   # Minimum amount of currency that can spawn
-  minAmount: 1
+  minAmount: 50
   # Maximum amount of currency that can spawn.
   # Set to the same value as MinAmount to always spawn the same amount
-  maxAmount: 1
+  maxAmount: 200
 # Settings for timely command
 # (letting people claim X amount of currency every Y hours)
 timely:
 # How much currency will the users get every time they run .timely command
 # setting to 0 or less will disable this feature
-  amount: 120
+  amount: 200
   # How often (in hours) can users claim currency with .timely command
   # setting to 0 or less will disable this feature
   cooldown: 12

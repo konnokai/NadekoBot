@@ -1,8 +1,8 @@
 ﻿#nullable disable
 using Microsoft.EntityFrameworkCore;
-using Nadeko.Common;
 using NadekoBot.Db;
 using NadekoBot.Services.Database.Models;
+using System.Diagnostics;
 
 namespace NadekoBot.Modules.Administration.Services;
 
@@ -10,24 +10,24 @@ public enum MuteType
 {
     Voice,
     Chat,
+    HardChat,
     All
 }
 
 public class MuteService : INService
 {
-    public enum TimerType { Mute, Ban, AddRole }
+    public enum TimerType { Mute, Ban, AddRole, HardChat }
 
     private static readonly OverwritePermissions _denyOverwrite = new(addReactions: PermValue.Deny,
-        sendMessages: PermValue.Deny,
-        attachFiles: PermValue.Deny);
+        sendMessages: PermValue.Deny);
 
     public event Action<IGuildUser, IUser, MuteType, string> UserMuted = delegate { };
     public event Action<IGuildUser, IUser, MuteType, string> UserUnmuted = delegate { };
 
     public ConcurrentDictionary<ulong, string> GuildMuteRoles { get; }
     public ConcurrentDictionary<ulong, ConcurrentHashSet<ulong>> MutedUsers { get; }
-
-    public ConcurrentDictionary<ulong, ConcurrentDictionary<(ulong, TimerType), Timer>> UnTimers { get; } = new();
+    public ConcurrentDictionary<ulong, ConcurrentHashSet<ulong>> HardMutedUsers { get; }
+    public ConcurrentDictionary<ulong, ConcurrentDictionary<(ulong, TimerType), (Timer, Stopwatch)>> UnTimers { get; } = new();
 
     private readonly DiscordSocketClient _client;
     private readonly DbService _db;
@@ -57,7 +57,10 @@ public class MuteService : INService
                                     .ToConcurrent();
 
             MutedUsers = new(configs.ToDictionary(k => k.GuildId,
-                v => new ConcurrentHashSet<ulong>(v.MutedUsers.Select(m => m.UserId))));
+                v => new ConcurrentHashSet<ulong>(v.MutedUsers.Where((x) => !x.IsHardMute).Select(m => m.UserId))));
+
+            HardMutedUsers = new(configs.ToDictionary(k => k.GuildId,
+                v => new ConcurrentHashSet<ulong>(v.MutedUsers.Where((x) => x.IsHardMute).Select(m => m.UserId))));
 
             var max = TimeSpan.FromDays(49);
 
@@ -74,7 +77,7 @@ public class MuteService : INService
                         after = unmute > max ? max : unmute;
                     }
 
-                    StartUn_Timer(conf.GuildId, x.UserId, after, TimerType.Mute);
+                    StartUn_Timer(conf.GuildId, x.UserId, after, x.IsHardMute ? TimerType.HardChat : TimerType.Mute);
                 }
 
                 foreach (var x in conf.UnbanTimer)
@@ -106,11 +109,26 @@ public class MuteService : INService
                 }
             }
 
-            _client.UserJoined += Client_UserJoined;
+            _client.MessageReceived += Client_MessageReceived;
+            //UserMuted += OnUserMuted;
+            //UserUnmuted += OnUserUnmuted;
         }
+    }
 
-        UserMuted += OnUserMuted;
-        UserUnmuted += OnUserUnmuted;
+    private async Task Client_MessageReceived(SocketMessage arg)
+    {
+        if (arg is not SocketUserMessage)
+            return;
+        if (arg.Channel is not SocketGuildChannel)
+            return;
+
+        var chnl = arg.Channel as SocketGuildChannel;
+
+        if (HardMutedUsers.TryGetValue(chnl.Guild.Id, out var muted))
+        {
+            if (muted.Contains(arg.Author.Id))
+                await arg.DeleteAsync();
+        }
     }
 
     private void OnUserMuted(
@@ -167,6 +185,28 @@ public class MuteService : INService
         return Task.CompletedTask;
     }
 
+    public bool CanReborn(IGuild guild, IUser user)
+    {
+        using (var uow = _db.GetDbContext())
+        {
+            var guildConfig = uow.GuildConfigsForId(guild.Id, set => set.Include(x => x.MuteRebornTickets));
+            if (guildConfig == null)
+                return false;
+            if (!guildConfig.EnableMuteReborn)
+                return false;
+
+            var muteReborn = guildConfig.MuteRebornTickets.FirstOrDefault((x) => x.UserId == user.Id);
+            if (muteReborn == null)
+                return false;
+
+            //_log.Info($"CanReborn - {user.Username}({user.Id}): {muteReborn.CanRebornNum}次");
+            if (muteReborn.RebornTicketNum > 0)
+                return true;
+
+            return false;
+        }
+    }
+
     public async Task SetMuteRoleAsync(ulong guildId, string name)
     {
         await using var uow = _db.GetDbContext();
@@ -197,12 +237,13 @@ public class MuteService : INService
                     set => set.Include(gc => gc.MutedUsers).Include(gc => gc.UnmuteTimers));
                 config.MutedUsers.Add(new()
                 {
-                    UserId = usr.Id
+                    UserId = usr.Id,
+                    IsHardMute = false
                 });
                 if (MutedUsers.TryGetValue(usr.Guild.Id, out var muted))
                     muted.Add(usr.Id);
 
-                config.UnmuteTimers.RemoveWhere(x => x.UserId == usr.Id);
+                config.UnmuteTimers.RemoveWhere(x => x.UserId == usr.Id && !x.IsHardMute);
 
                 await uow.SaveChangesAsync();
             }
@@ -223,6 +264,27 @@ public class MuteService : INService
             await usr.AddRoleAsync(await GetMuteRole(usr.Guild));
             UserMuted(usr, mod, MuteType.Chat, reason);
         }
+        else if (type == MuteType.HardChat)
+        {
+            StopTimer(usr.GuildId, usr.Id, TimerType.HardChat);
+            using (var uow = _db.GetDbContext())
+            {
+                var config = uow.GuildConfigsForId(usr.Guild.Id,
+                    set => set.Include(gc => gc.MutedUsers)
+                        .Include(gc => gc.UnmuteTimers));
+                config.MutedUsers.Add(new MutedUserId()
+                {
+                    UserId = usr.Id,
+                    IsHardMute = true
+                });
+                if (HardMutedUsers.TryGetValue(usr.Guild.Id, out ConcurrentHashSet<ulong> muted))
+                    muted.Add(usr.Id);
+
+                config.UnmuteTimers.RemoveWhere(x => x.UserId == usr.Id && x.IsHardMute);
+
+                await uow.SaveChangesAsync();
+            }
+        }
     }
 
     public async Task UnmuteUser(
@@ -242,7 +304,8 @@ public class MuteService : INService
                     set => set.Include(gc => gc.MutedUsers).Include(gc => gc.UnmuteTimers));
                 var match = new MutedUserId
                 {
-                    UserId = usrId
+                    UserId = usrId,
+                    IsHardMute = false
                 };
                 var toRemove = config.MutedUsers.FirstOrDefault(x => x.Equals(match));
                 if (toRemove is not null)
@@ -250,7 +313,7 @@ public class MuteService : INService
                 if (MutedUsers.TryGetValue(guildId, out var muted))
                     muted.TryRemove(usrId);
 
-                config.UnmuteTimers.RemoveWhere(x => x.UserId == usrId);
+                config.UnmuteTimers.RemoveWhere(x => x.UserId == usrId && !x.IsHardMute);
 
                 await uow.SaveChangesAsync();
             }
@@ -287,6 +350,32 @@ public class MuteService : INService
             await usr.RemoveRoleAsync(await GetMuteRole(usr.Guild));
             UserUnmuted(usr, mod, MuteType.Chat, reason);
         }
+        else if (type == MuteType.HardChat)
+        {
+            StopTimer(guildId, usrId, TimerType.HardChat);
+            using (var uow = _db.GetDbContext())
+            {
+                var config = uow.GuildConfigsForId(guildId, set => set.Include(gc => gc.MutedUsers)
+                    .Include(gc => gc.UnmuteTimers));
+                var match = new MutedUserId()
+                {
+                    UserId = usrId,
+                    IsHardMute = true
+                };
+                var toRemove = config.MutedUsers.FirstOrDefault(x => x.Equals(match));
+                if (toRemove != null)
+                {
+                    uow.Remove(toRemove);
+                }
+
+                if (HardMutedUsers.TryGetValue(guildId, out ConcurrentHashSet<ulong> muted))
+                    muted.TryRemove(usrId);
+
+                config.UnmuteTimers.RemoveWhere(x => x.UserId == usrId && x.IsHardMute);
+
+                await uow.SaveChangesAsync();
+            }
+        }
     }
 
     public async Task<IRole> GetMuteRole(IGuild guild)
@@ -294,7 +383,7 @@ public class MuteService : INService
         if (guild is null)
             throw new ArgumentNullException(nameof(guild));
 
-        const string defaultMuteRoleName = "nadeko-mute";
+        const string defaultMuteRoleName = "禁言";
 
         var muteRoleName = GuildMuteRoles.GetOrAdd(guild.Id, defaultMuteRoleName);
 
@@ -346,12 +435,31 @@ public class MuteService : INService
             config.UnmuteTimers.Add(new()
             {
                 UserId = user.Id,
-                UnmuteAt = DateTime.UtcNow + after
+                UnmuteAt = DateTime.UtcNow + after,
+                IsHardMute = false
             }); // add teh unmute timer to the database
             uow.SaveChanges();
         }
 
         StartUn_Timer(user.GuildId, user.Id, after, TimerType.Mute); // start the timer
+    }
+
+    public async Task TimedHardMute(IGuildUser user, IUser mod, TimeSpan after)
+    {
+        await MuteUser(user, mod, MuteType.HardChat, "");
+        using (var uow = _db.GetDbContext())
+        {
+            var config = uow.GuildConfigsForId(user.GuildId, set => set.Include(x => x.UnmuteTimers));
+            config.UnmuteTimers.Add(new UnmuteTimer()
+            {
+                UserId = user.Id,
+                UnmuteAt = DateTime.UtcNow + after,
+                IsHardMute = true
+            });
+            uow.SaveChanges();
+        }
+
+        StartUn_Timer(user.GuildId, user.Id, after, TimerType.HardChat);
     }
 
     public async Task TimedBan(
@@ -406,72 +514,73 @@ public class MuteService : INService
         ulong? roleId = null)
     {
         //load the unmute timers for this guild
-        var userUnTimers = UnTimers.GetOrAdd(guildId, new ConcurrentDictionary<(ulong, TimerType), Timer>());
+        var userUnTimers = UnTimers.GetOrAdd(guildId, new ConcurrentDictionary<(ulong, TimerType), (Timer, Stopwatch)>());
 
         //unmute timer to be added
-        var toAdd = new Timer(async _ =>
+        var toAdd = (new Timer(async _ =>
+        {
+            if (type == TimerType.Ban)
             {
-                if (type == TimerType.Ban)
+                try
                 {
-                    try
-                    {
-                        RemoveTimerFromDb(guildId, userId, type);
-                        StopTimer(guildId, userId, type);
-                        var guild = _client.GetGuild(guildId); // load the guild
-                        if (guild is not null)
-                            await guild.RemoveBanAsync(userId);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Warning(ex, "Couldn't unban user {UserId} in guild {GuildId}", userId, guildId);
-                    }
+                    RemoveTimerFromDb(guildId, userId, type);
+                    StopTimer(guildId, userId, type);
+                    var guild = _client.GetGuild(guildId); // load the guild
+                    if (guild is not null)
+                        await guild.RemoveBanAsync(userId);
                 }
-                else if (type == TimerType.AddRole)
+                catch (Exception ex)
                 {
-                    try
-                    {
-                        if (roleId is null)
-                            return;
+                    Log.Warning(ex, "Couldn't unban user {UserId} in guild {GuildId}", userId, guildId);
+                }
+            }
+            else if (type == TimerType.AddRole)
+            {
+                try
+                {
+                    if (roleId is null)
+                        return;
 
-                        RemoveTimerFromDb(guildId, userId, type);
-                        StopTimer(guildId, userId, type);
-                        var guild = _client.GetGuild(guildId);
-                        var user = guild?.GetUser(userId);
-                        var role = guild?.GetRole(roleId.Value);
-                        if (guild is not null && user is not null && user.Roles.Contains(role))
-                            await user.RemoveRoleAsync(role);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Warning(ex, "Couldn't remove role from user {UserId} in guild {GuildId}", userId, guildId);
-                    }
+                    RemoveTimerFromDb(guildId, userId, type);
+                    StopTimer(guildId, userId, type);
+                    var guild = _client.GetGuild(guildId);
+                    var user = guild?.GetUser(userId);
+                    var role = guild?.GetRole(roleId.Value);
+                    if (guild is not null && user is not null && user.Roles.Contains(role))
+                        await user.RemoveRoleAsync(role);
                 }
-                else
+                catch (Exception ex)
                 {
-                    try
-                    {
-                        // unmute the user, this will also remove the timer from the db
-                        await UnmuteUser(guildId, userId, _client.CurrentUser, reason: "Timed mute expired");
-                    }
-                    catch (Exception ex)
-                    {
-                        RemoveTimerFromDb(guildId, userId, type); // if unmute errored, just remove unmute from db
-                        Log.Warning(ex, "Couldn't unmute user {UserId} in guild {GuildId}", userId, guildId);
-                    }
+                    Log.Warning(ex, "Couldn't remove role from user {UserId} in guild {GuildId}", userId, guildId);
                 }
-            },
-            null,
-            after,
-            Timeout.InfiniteTimeSpan);
+            }
+            else
+            {
+                try
+                {
+                    // unmute the user, this will also remove the timer from the db
+                    await UnmuteUser(guildId, userId, _client.CurrentUser, type: type == TimerType.HardChat ? MuteType.HardChat : MuteType.All, reason: "Timed mute expired");
+                }
+                catch (Exception ex)
+                {
+                    RemoveTimerFromDb(guildId, userId, type); // if unmute errored, just remove unmute from db
+                    Log.Warning(ex, "Couldn't unmute user {UserId} in guild {GuildId}", userId, guildId);
+                }
+            }
+        }, null, after, Timeout.InfiniteTimeSpan), new Stopwatch());
 
         //add it, or stop the old one and add this one
-        userUnTimers.AddOrUpdate((userId, type),
-            _ => toAdd,
-            (_, old) =>
-            {
-                old.Change(Timeout.Infinite, Timeout.Infinite);
-                return toAdd;
-            });
+        userUnTimers.AddOrUpdate((userId, type), (key) =>
+        {
+            toAdd.Item2.Start();
+            return toAdd;
+        }, (key, old) =>
+        {
+            old.Item1.Change(Timeout.Infinite, Timeout.Infinite);
+            old.Item2.Stop();
+            toAdd.Item2.Start();
+            return toAdd;
+        });
     }
 
     public void StopTimer(ulong guildId, ulong userId, TimerType type)
@@ -480,7 +589,9 @@ public class MuteService : INService
             return;
 
         if (userTimer.TryRemove((userId, type), out var removed))
-            removed.Change(Timeout.Infinite, Timeout.Infinite);
+        {
+            removed.Item1.Change(Timeout.Infinite, Timeout.Infinite);
+        }
     }
 
     private void RemoveTimerFromDb(ulong guildId, ulong userId, TimerType type)
@@ -490,7 +601,12 @@ public class MuteService : INService
         if (type == TimerType.Mute)
         {
             var config = uow.GuildConfigsForId(guildId, set => set.Include(x => x.UnmuteTimers));
-            toDelete = config.UnmuteTimers.FirstOrDefault(x => x.UserId == userId);
+            toDelete = config.UnmuteTimers.FirstOrDefault(x => x.UserId == userId && !x.IsHardMute);
+        }
+        else if (type == TimerType.HardChat)
+        {
+            var config = uow.GuildConfigsForId(guildId, set => set.Include(x => x.UnmuteTimers));
+            toDelete = config.UnmuteTimers.FirstOrDefault(x => x.UserId == userId && x.IsHardMute);
         }
         else
         {

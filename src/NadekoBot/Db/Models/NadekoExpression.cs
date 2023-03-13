@@ -11,7 +11,10 @@ public class NadekoExpression : DbEntity
     public bool DmResponse { get; set; }
     public bool ContainsAnywhere { get; set; }
     public bool AllowTarget { get; set; }
+    public bool OwnerOnly { get; set; }
+    public bool IsRegex { get; set; }
     public string Reactions { get; set; }
+    public ulong UseCount { get; set; }
 
     public string[] GetReactions()
         => string.IsNullOrWhiteSpace(Reactions) ? Array.Empty<string>() : Reactions.Split("@@@");

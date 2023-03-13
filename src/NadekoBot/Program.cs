@@ -1,6 +1,5 @@
-using Nadeko.Common;
-
 var pid = Environment.ProcessId;
+Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 var shardId = 0;
 int? totalShards = null; // 0 to read from creds.yml

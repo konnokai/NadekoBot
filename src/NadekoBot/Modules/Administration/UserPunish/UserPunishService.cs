@@ -13,6 +13,9 @@ namespace NadekoBot.Modules.Administration.Services;
 
 public class UserPunishService : INService, IReadyExecutor
 {
+    public List<ulong> RestBanList { get; private set; }
+    public readonly string FILE_PATH = "data/RestBanList.json";
+
     private readonly MuteService _mute;
     private readonly DbService _db;
     private readonly BlacklistService _blacklistService;
@@ -33,6 +36,11 @@ public class UserPunishService : INService, IReadyExecutor
         _blacklistService = blacklistService;
         _bcs = bcs;
         _client = client;
+
+        if (File.Exists(FILE_PATH))
+            RestBanList = JsonConvert.DeserializeObject<List<ulong>>(File.ReadAllText(FILE_PATH));
+        else
+            RestBanList = new List<ulong>();
     }
 
     public async Task OnReadyAsync()

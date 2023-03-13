@@ -1,4 +1,5 @@
 ﻿#nullable disable
+using LinqToDB.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using NadekoBot.Common.ModuleBehaviors;
 using NadekoBot.Common.Yml;
@@ -7,8 +8,7 @@ using NadekoBot.Modules.Permissions.Common;
 using NadekoBot.Modules.Permissions.Services;
 using NadekoBot.Services.Database.Models;
 using System.Runtime.CompilerServices;
-using LinqToDB.EntityFrameworkCore;
-using Nadeko.Common;
+using System.Text.RegularExpressions;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -30,6 +30,8 @@ public sealed class NadekoExpressionsService : IExecOnMessage, IReadyExecutor
 #   ca: Whether expression expects trigger anywhere (see .h .exprca) 
 #   dm: Whether expression DMs the response (see .h .exprdm) 
 #   ad: Whether expression automatically deletes triggering message (see .h .exprad) 
+#   oo: Whether custom reaction owner only
+#   ir: Whether custom reaction is regex triggering message
 
 ";
 
@@ -68,9 +70,11 @@ public sealed class NadekoExpressionsService : IExecOnMessage, IReadyExecutor
     private readonly Bot _bot;
     private readonly GlobalPermissionService _gperm;
     private readonly CmdCdService _cmdCds;
+    private readonly Administration.Services.MuteService _muteService;
     private readonly IPubSub _pubSub;
     private readonly IEmbedBuilderService _eb;
     private readonly Random _rng;
+    private readonly IBotCredentials _creds;
 
     private bool ready;
     private ConcurrentHashSet<ulong> _disabledGlobalExpressionGuilds;
@@ -84,7 +88,9 @@ public sealed class NadekoExpressionsService : IExecOnMessage, IReadyExecutor
         CommandHandler cmd,
         GlobalPermissionService gperm,
         CmdCdService cmdCds,
+        Administration.Services.MuteService muteService,
         IPubSub pubSub,
+        IBotCredentials creds,
         IEmbedBuilderService eb)
     {
         _db = db;
@@ -95,8 +101,10 @@ public sealed class NadekoExpressionsService : IExecOnMessage, IReadyExecutor
         _bot = bot;
         _gperm = gperm;
         _cmdCds = cmdCds;
+        _muteService = muteService;
         _pubSub = pubSub;
         _eb = eb;
+        _creds = creds;
         _rng = new NadekoRandom();
 
         _pubSub.Sub(_exprsReloadedKey, OnExprsShouldReload);
@@ -156,11 +164,17 @@ public sealed class NadekoExpressionsService : IExecOnMessage, IReadyExecutor
         if (umsg.Channel is not SocketTextChannel channel)
             return null;
 
-        var content = umsg.Content.Trim().ToLowerInvariant();
+        if (_muteService.HardMutedUsers.TryGetValue(channel.Guild.Id, out var muted))
+        {
+            if (muted.Contains(umsg.Author.Id))
+                return null;
+        }
+
+        var content = umsg.Content.Trim().ToLowerInvariant().Replace("<@!", "<@");
 
         if (newguildExpressions.TryGetValue(channel.Guild.Id, out var expressions) && expressions.Length > 0)
         {
-            var expr = MatchExpressions(content, expressions);
+            var expr = MatchExpressions(content, expressions, umsg.Author);
             if (expr is not null)
                 return expr;
         }
@@ -170,17 +184,27 @@ public sealed class NadekoExpressionsService : IExecOnMessage, IReadyExecutor
         
         var localGrs = globalExpressions;
 
-        return MatchExpressions(content, localGrs);
+        return MatchExpressions(content, localGrs, umsg.Author);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private NadekoExpression MatchExpressions(in ReadOnlySpan<char> content, NadekoExpression[] exprs)
+    private NadekoExpression MatchExpressions(in ReadOnlySpan<char> content, NadekoExpression[] exprs, IUser user)
     {
         var result = new List<NadekoExpression>(1);
         for (var i = 0; i < exprs.Length; i++)
         {
             var expr = exprs[i];
             var trigger = expr.Trigger;
+
+            if (expr.OwnerOnly && !_creds.IsOwner(user))
+                continue;
+
+            if (expr.IsRegex && Regex.IsMatch(content.ToString(), expr.Trigger))
+            {
+                result.Add(expr);
+                continue;
+            }
+
             if (content.Length > trigger.Length)
             {
                 // if input is greater than the trigger, it can only work if:
@@ -228,11 +252,25 @@ public sealed class NadekoExpressionsService : IExecOnMessage, IReadyExecutor
         if (cancelled is not null)
             return cancelled;
 
-        return result[_rng.Next(0, result.Count)];
+        var exprResult = result[_rng.Next(0, result.Count)];
+        using (var uow = _db.GetDbContext())
+        {
+            var rObj = uow.Expressions.GetById(exprResult.Id);
+            if (rObj != null)
+            {
+                rObj.UseCount += 1;
+                uow.SaveChanges();
+            }
+        }
+
+        return exprResult;
     }
 
     public async Task<bool> ExecOnMessageAsync(IGuild guild, IUserMessage msg)
     {
+        if (guild != null && msg.Content.StartsWith(_cmd.GetPrefix(guild.Id)))
+            return false;
+
         // maybe this message is an expression
         var expr = TryGetExpression(msg);
 
@@ -477,6 +515,10 @@ public sealed class NadekoExpressionsService : IExecOnMessage, IReadyExecutor
                 newVal = expr.DmResponse = !expr.DmResponse;
             else if (field == ExprField.AllowTarget)
                 newVal = expr.AllowTarget = !expr.AllowTarget;
+            else if (field == ExprField.OwnerOnly)
+                newVal = expr.OwnerOnly = !expr.OwnerOnly;
+            else if (field == ExprField.IsRegex)
+                newVal = expr.IsRegex = !expr.IsRegex;
 
             await uow.SaveChangesAsync();
         }
@@ -551,7 +593,9 @@ public sealed class NadekoExpressionsService : IExecOnMessage, IReadyExecutor
                                                          AllowTarget = expr.At,
                                                          ContainsAnywhere = expr.Ca,
                                                          DmResponse = expr.Dm,
-                                                         AutoDeleteTrigger = expr.Ad
+                                                         AutoDeleteTrigger = expr.Ad,
+                                                         IsRegex = expr.Ir,
+                                                         OwnerOnly = expr.Oo
                                                      }));
         }
 
@@ -641,7 +685,7 @@ public sealed class NadekoExpressionsService : IExecOnMessage, IReadyExecutor
 
     public async Task<NadekoExpression> AddAsync(ulong? guildId, string key, string message)
     {
-        key = key.ToLowerInvariant();
+        key = key.ToLowerInvariant().Replace("<@!", "<@");
         var expr = new NadekoExpression
         {
             GuildId = guildId,
@@ -715,6 +759,13 @@ public sealed class NadekoExpressionsService : IExecOnMessage, IReadyExecutor
             return newguildExpressions.TryGetValue(guildId, out var exprs) ? exprs : Array.Empty<NadekoExpression>();
 
         return globalExpressions;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public List<NadekoExpression> GetExpressionsList()
+    {
+        using var uow = _db.GetDbContext();
+        return uow.Expressions.ToList();
     }
 
     #endregion

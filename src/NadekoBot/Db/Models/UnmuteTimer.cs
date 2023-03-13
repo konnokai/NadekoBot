@@ -5,6 +5,7 @@ public class UnmuteTimer : DbEntity
 {
     public ulong UserId { get; set; }
     public DateTime UnmuteAt { get; set; }
+    public bool IsHardMute { get; set; } = false;
 
     public override int GetHashCode()
         => UserId.GetHashCode();

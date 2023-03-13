@@ -15,20 +15,20 @@ public class GuildConfig : DbEntity
     public string AutoAssignRoleIds { get; set; }
 
     //greet stuff
-    public int AutoDeleteGreetMessagesTimer { get; set; } = 30;
-    public int AutoDeleteByeMessagesTimer { get; set; } = 30;
+    public int AutoDeleteGreetMessagesTimer { get; set; } = 0;
+    public int AutoDeleteByeMessagesTimer { get; set; } = 0;
 
     public ulong GreetMessageChannelId { get; set; }
     public ulong ByeMessageChannelId { get; set; }
 
     public bool SendDmGreetMessage { get; set; }
-    public string DmGreetMessageText { get; set; } = "Welcome to the %server% server, %user%!";
+    public string DmGreetMessageText { get; set; } = "歡迎 %user.fullname% 來到 %server%";
 
     public bool SendChannelGreetMessage { get; set; }
-    public string ChannelGreetMessageText { get; set; } = "Welcome to the %server% server, %user%!";
+    public string ChannelGreetMessageText { get; set; } = "歡迎 %user.fullname% 來到 %server%";
 
     public bool SendChannelByeMessage { get; set; }
-    public string ChannelByeMessageText { get; set; } = "%user% has left!";
+    public string ChannelByeMessageText { get; set; } = "%user.fullname% 已離開";
 
     //self assignable roles
     public bool ExclusiveSelfAssignedRoles { get; set; }
@@ -41,7 +41,7 @@ public class GuildConfig : DbEntity
     public HashSet<GCChannelId> GenerateCurrencyChannelIds { get; set; } = new();
 
     public List<Permissionv2> Permissions { get; set; }
-    public bool VerbosePermissions { get; set; } = true;
+    public bool VerbosePermissions { get; set; } = false;
     public string PermissionRole { get; set; }
 
     public HashSet<CommandCooldown> CommandCooldowns { get; set; } = new();
@@ -68,8 +68,8 @@ public class GuildConfig : DbEntity
     public AntiSpamSetting AntiSpamSetting { get; set; }
     public AntiAltSetting AntiAltSetting { get; set; }
 
-    public string Locale { get; set; }
-    public string TimeZoneId { get; set; }
+    public string Locale { get; set; } = "zh-TW";
+    public string TimeZoneId { get; set; } = "Asia/Taipei";
 
     public HashSet<UnmuteTimer> UnmuteTimers { get; set; } = new();
     public HashSet<UnbanTimer> UnbanTimer { get; set; } = new();
@@ -100,9 +100,18 @@ public class GuildConfig : DbEntity
     #region Boost Message
 
     public bool SendBoostMessage { get; set; }
-    public string BoostMessage { get; set; } = "%user% just boosted this server!";
+    public string BoostMessage { get; set; } = "%user% 加成了伺服器!";
     public ulong BoostMessageChannelId { get; set; }
     public int BoostMessageDeleteAfter { get; set; }
 
+    #endregion
+
+    #region MuteReborn
+    public bool EnableMuteReborn { get; set; } = false;
+    public List<MuteRebornTicket> MuteRebornTickets { get; set; } = new();
+    public int BuyMuteRebornTicketCost { get; set; } = 10000;
+    public int EachTicketIncreaseMuteTime { get; set; } = 5;
+    public int EachTicketDecreaseMuteTime { get; set; } = 30;
+    public int MaxIncreaseMuteTime { get; set; } = 30;
     #endregion
 }

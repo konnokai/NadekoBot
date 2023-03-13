@@ -275,7 +275,7 @@ public partial class Utility : NadekoModule
         await ctx.Channel.EmbedAsync(_eb.Create()
                                         .WithOkColor()
                                         .WithAuthor($"NadekoBot v{StatsService.BOT_VERSION}",
-                                            "https://nadeko-pictures.nyc3.digitaloceanspaces.com/other/avatar.png",
+                                             _client.CurrentUser.GetAvatarUrl(),
                                             "https://nadekobot.readthedocs.io/en/latest/")
                                         .AddField(GetText(strs.author), _stats.Author, true)
                                         .AddField(GetText(strs.botid), _client.CurrentUser.Id.ToString(), true)
@@ -299,8 +299,7 @@ public partial class Utility : NadekoModule
     }
 
     [Cmd]
-    public async Task
-        Showemojis([Leftover] string _) // need to have the parameter so that the message.tags gets populated
+    public async Task Showemojis([Leftover] string _) // need to have the parameter so that the message.tags gets populated
     {
         var tags = ctx.Message.Tags.Where(t => t.Type == TagType.Emoji).Select(t => (Emote)t.Value);
 

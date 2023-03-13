@@ -24,7 +24,7 @@ public class FontProvider : INService
     {
         _fonts = new();
 
-        NotoSans = _fonts.Add("data/fonts/NotoSans-Bold.ttf");
+        NotoSans = _fonts.Add("data/fonts/NotoSansCJKtc.ttf");
         UniSans = _fonts.Add("data/fonts/Uni Sans.ttf");
 
         FallBackFonts = new();

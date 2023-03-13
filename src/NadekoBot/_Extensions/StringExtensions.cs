@@ -2,7 +2,6 @@ using NadekoBot.Common.Yml;
 using Newtonsoft.Json;
 using System.Text;
 using System.Text.RegularExpressions;
-using Nadeko.Common;
 
 namespace NadekoBot.Extensions;
 
@@ -19,6 +18,11 @@ public static class StringExtensions
     private static readonly Regex _codePointRegex =
         new(@"(\\U(?<code>[a-zA-Z0-9]{8})|\\u(?<code>[a-zA-Z0-9]{4})|\\x(?<code>[a-zA-Z0-9]{2}))",
             RegexOptions.Compiled);
+
+    public static string ToDesignPath(this string designName)
+    {
+        return $"data/char_design/{designName}/";
+    }
 
     public static string PadBoth(this string str, int length)
     {

@@ -207,11 +207,11 @@ public class PlantPickService : INService, IExecNoCommand
 
                         var pw = config.Generation.HasPassword ? GenerateCurrencyPassword().ToUpperInvariant() : null;
 
-                        IUserMessage sent;
-                        var (stream, ext) = await GetRandomCurrencyImageAsync(pw);
+                        IUserMessage sent = await channel.SendMessageAsync($"{toSend} 密碼: {pw}");
+                        //var (stream, ext) = await GetRandomCurrencyImageAsync(pw);
 
-                        await using (stream)
-                            sent = await channel.SendFileAsync(stream, $"currency_image.{ext}", toSend);
+                        //await using (stream)
+                        //    sent = await channel.SendFileAsync(stream, $"currency_image.{ext}", toSend);
 
                         await AddPlantToDatabase(channel.GuildId,
                             channel.Id,

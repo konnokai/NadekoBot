@@ -32,9 +32,9 @@ public class BotStrings : IBotStrings
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            Log.Warning("'{Key}' key is missing from '{LanguageName}' response strings. You may ignore this message",
-                key,
-                cultureInfo.Name);
+            //Log.Warning("'{Key}' key is missing from '{LanguageName}' response strings. You may ignore this message",
+            //    key,
+            //    cultureInfo.Name);
             text = GetString(key, _usCultureInfo) ?? $"Error: dkey {key} not found!";
             if (string.IsNullOrWhiteSpace(text))
             {

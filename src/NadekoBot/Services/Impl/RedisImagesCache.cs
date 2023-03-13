@@ -62,6 +62,8 @@ public sealed class ImageCache : IImageCache, INService
             {
                 if (url.IsFile)
                 {
+                    Log.Information(url.ToString());
+                    Log.Information(url.LocalPath);
                     return await File.ReadAllBytesAsync(url.LocalPath);
                 }
 

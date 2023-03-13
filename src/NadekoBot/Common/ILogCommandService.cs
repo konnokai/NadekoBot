@@ -25,6 +25,7 @@ public enum LogType
     ChannelDestroyed,
     ChannelUpdated,
     UserPresence,
+    ReactionRemoved,
     VoicePresence,
     VoicePresenceTts,
     UserMuted,

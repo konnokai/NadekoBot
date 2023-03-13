@@ -117,7 +117,7 @@ See RotatingStatuses submodule in Administration.")]
 }";
         var blocked = new BlockedConfig();
         Blocked = blocked;
-        Prefix = ".";
+        Prefix = "~";
         RotateStatuses = false;
         GroupGreets = false;
         DmHelpTextKeywords = new()

@@ -12,6 +12,8 @@ public class ExportedExpr
     public bool Dm { get; set; }
     public bool At { get; set; }
     public bool Ca { get; set; }
+    public bool Oo { get; set; }
+    public bool Ir { get; set; }
     public string[] React;
 
     public static ExportedExpr FromModel(NadekoExpression cr)
@@ -23,6 +25,8 @@ public class ExportedExpr
             At = cr.AllowTarget,
             Ca = cr.ContainsAnywhere,
             Dm = cr.DmResponse,
+            Oo = cr.OwnerOnly,
+            Ir = cr.IsRegex,
             React = string.IsNullOrWhiteSpace(cr.Reactions) ? null : cr.GetReactions()
         };
 }

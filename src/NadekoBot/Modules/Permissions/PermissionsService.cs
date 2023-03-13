@@ -16,6 +16,7 @@ public class PermissionService : IExecPreCommand, INService
 
     private readonly DbService _db;
     private readonly CommandHandler _cmd;
+    private readonly IBotCredentials _creds;
     private readonly IBotStrings _strings;
     private readonly IEmbedBuilderService _eb;
 
@@ -24,12 +25,14 @@ public class PermissionService : IExecPreCommand, INService
         DbService db,
         CommandHandler cmd,
         IBotStrings strings,
-        IEmbedBuilderService eb)
+        IEmbedBuilderService eb,
+        IBotCredentials creds)
     {
         _db = db;
         _cmd = cmd;
         _strings = strings;
         _eb = eb;
+        _creds = creds;
 
         using var uow = _db.GetDbContext();
         foreach (var x in uow.GuildConfigs.PermissionsForAll(client.Guilds.ToArray().Select(x => x.Id).ToList()))
@@ -134,7 +137,7 @@ public class PermissionService : IExecPreCommand, INService
             if (user is not IGuildUser guildUser)
                 return true;
 
-            if (guildUser.GuildPermissions.Administrator)
+            if (guildUser.GuildPermissions.Administrator || _creds.IsOwner(user))
                 return false;
 
             var permRole = pc.PermRole;

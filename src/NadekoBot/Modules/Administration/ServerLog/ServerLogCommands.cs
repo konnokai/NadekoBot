@@ -137,6 +137,8 @@ public partial class Administration
                     return l.ChannelUpdatedId;
                 case LogType.UserPresence:
                     return l.LogUserPresenceId;
+                case LogType.ReactionRemoved:
+                    return l.ReactionRemovedId;
                 case LogType.VoicePresence:
                     return l.LogVoicePresenceId;
                 case LogType.VoicePresenceTts:

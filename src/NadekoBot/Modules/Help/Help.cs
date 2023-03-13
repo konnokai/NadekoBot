@@ -7,15 +7,14 @@ using NadekoBot.Modules.Permissions.Services;
 using Newtonsoft.Json;
 using System.Text;
 using System.Text.Json;
-using Nadeko.Common;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace NadekoBot.Modules.Help;
 
 public partial class Help : NadekoModule<HelpService>
 {
-    public const string PATREON_URL = "https://patreon.com/nadekobot";
-    public const string PAYPAL_URL = "https://paypal.me/Kwoth";
+    public const string PATREON_URL = "https://patreon.com/jun112561";
+    public const string PAYPAL_URL = "https://paypal.me/jun112561";
 
     private readonly CommandService _cmds;
     private readonly BotConfigService _bss;

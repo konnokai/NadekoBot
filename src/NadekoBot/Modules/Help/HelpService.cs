@@ -131,7 +131,7 @@ public class HelpService : IExecNoCommand, INService
         var toReturn = new List<string>();
 
         if (cmd.Preconditions.Any(x => x is OwnerOnlyAttribute))
-            toReturn.Add("Bot Owner Only");
+            toReturn.Add("Bot¾Ö¦³ªÌ­­©w");
         
         if(cmd.Preconditions.Any(x => x is NoPublicBotAttribute)
            || cmd.Module

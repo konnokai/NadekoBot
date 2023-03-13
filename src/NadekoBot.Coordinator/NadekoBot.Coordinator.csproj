@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="..\NadekoBot\.editorconfig" Link=".editorconfig" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Protobuf Include="Protos\coordinator.proto" GrpcServices="Server" />
   </ItemGroup>
 

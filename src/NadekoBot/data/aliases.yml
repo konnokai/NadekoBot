@@ -1,3 +1,74 @@
+uma:
+  - uma
+umaend:
+  - umaend
+restban:
+  - restban
+addrest:
+  - addrest
+delrest:
+  - delrest
+hardmute:
+  - hardmute
+unhardmute:
+  - unhardmute
+settingmutereborn:
+  - settingmutereborn
+  - smb
+buymuterebornticket:
+  - buymuterebornticket
+  - bmrt
+sine:
+  - sine
+showmuterebornticketnum:
+  - showmuterebornticketnum
+  - smrtn
+listmuterebornticketnum:
+  - listmuterebornticketnum
+  - lmrtn
+addmuterebornticketnum:
+  - addmuterebornticketnum
+  - amrtn
+togglemutereborn:
+  - togglemutereborn
+  - tmb
+addchardesign:
+  - addchardesign
+  - acd
+savechardesign:
+  - savechardesign
+  - scd
+addchardesignplayingstatus:
+  - addchardesignplayingstatus
+  - acdps
+changechardesign:
+  - changechardesign
+  - ccd
+listchardesign:
+  - listchardesign
+  - lcd
+deletechardesign:
+  - deletechardesign
+  - dcd
+remindinstantnoodles:
+  - remindinstantnoodles
+  - 泡麵
+exprimageadd:
+  - exprimageadd
+  - exia
+  - aicr
+custreactusecount:
+  - custreactusecount
+  - cruc
+custreactusecountleaderboard:
+  - custreactusecountleaderboard
+  - cruclb
+exprir:
+  - exprir
+  - exir
+exproo:
+  - exproo
+  - exoo
 h:
   - help
   - h

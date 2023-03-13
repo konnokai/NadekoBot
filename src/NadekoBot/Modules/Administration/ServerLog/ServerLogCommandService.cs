@@ -1,10 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Nadeko.Common;
 using NadekoBot.Common.ModuleBehaviors;
 using NadekoBot.Db;
 using NadekoBot.Modules.Administration.Services;
 using NadekoBot.Services.Database.Models;
+using System.Text.RegularExpressions;
 
 namespace NadekoBot.Modules.Administration;
 
@@ -25,9 +25,12 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
     private readonly GuildTimezoneService _tz;
     private readonly IEmbedBuilderService _eb;
     private readonly IMemoryCache _memoryCache;
+    private readonly IHttpClientFactory _httpFactory;
 
     private readonly ConcurrentHashSet<ulong> _ignoreMessageIds = new();
     private readonly UserPunishService _punishService;
+
+    private readonly Timer autoDeleteAttachDir;
 
     public LogCommandService(
         DiscordSocketClient client,
@@ -38,7 +41,8 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
         GuildTimezoneService tz,
         IMemoryCache memoryCache,
         IEmbedBuilderService eb,
-        UserPunishService punishService)
+        UserPunishService punishService,
+        IHttpClientFactory httpFactory)
     {
         _client = client;
         _memoryCache = memoryCache;
@@ -49,7 +53,8 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
         _prot = prot;
         _tz = tz;
         _punishService = punishService;
-        
+        _httpFactory = httpFactory;
+
         using (var uow = db.GetDbContext())
         {
             var guildIds = client.Guilds.Select(x => x.Id).ToList();
@@ -62,7 +67,34 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
             GuildLogSettings = configs.ToDictionary(ls => ls.GuildId).ToConcurrent();
         }
 
-        //_client.MessageReceived += _client_MessageReceived;
+        // 刪除14天的附件紀錄
+        autoDeleteAttachDir = new Timer((obj) =>
+        {
+            try
+            {
+                Regex regex = new Regex(@"(\d{4})(\d{2})(\d{2})");
+                var list = Directory.GetDirectories("attach_log", "202?????", SearchOption.TopDirectoryOnly);
+                foreach (var item in list)
+                {
+                    var regexResult = regex.Match(item);
+                    if (!regexResult.Success) continue;
+
+                    if (DateTime.Now.Subtract(Convert.ToDateTime($"{regexResult.Groups[1]}/{regexResult.Groups[2]}/{regexResult.Groups[3]}")) > TimeSpan.FromDays(14))
+                    {
+                        Directory.Delete(item, true);
+                        Serilog.Log.Warning($"已刪除: {item}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Error(ex.ToString());
+            }
+        }, null, TimeSpan.FromSeconds(Math.Round(Convert.ToDateTime($"{DateTime.Now.AddDays(1):yyyy/MM/dd 00:00:00}").Subtract(DateTime.Now).TotalSeconds) + 3), TimeSpan.FromDays(1));
+
+#if RELEASE
+        _client.MessageReceived += _client_MessageReceived;
+#endif
         _client.MessageUpdated += _client_MessageUpdated;
         _client.MessageDeleted += _client_MessageDeleted;
         _client.UserBanned += _client_UserBanned;
@@ -78,6 +110,8 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
         _client.ChannelDestroyed += _client_ChannelDestroyed;
         _client.ChannelUpdated += _client_ChannelUpdated;
         _client.RoleDeleted += _client_RoleDeleted;
+
+        _client.ReactionRemoved += _client_ReactionRemoved;
 
         _mute.UserMuted += MuteCommands_UserMuted;
         _mute.UserUnmuted += MuteCommands_UserUnmuted;
@@ -184,13 +218,54 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
         logSetting.LogOtherId = logSetting.MessageUpdatedId = logSetting.MessageDeletedId = logSetting.UserJoinedId =
             logSetting.UserLeftId = logSetting.UserBannedId = logSetting.UserUnbannedId = logSetting.UserUpdatedId =
                 logSetting.ChannelCreatedId = logSetting.ChannelDestroyedId = logSetting.ChannelUpdatedId =
-                    logSetting.LogUserPresenceId = logSetting.LogVoicePresenceId = logSetting.UserMutedId =
-                        logSetting.LogVoicePresenceTTSId = value ? channelId : null;
+                    logSetting.LogUserPresenceId = logSetting.ReactionRemovedId = logSetting.LogVoicePresenceId = 
+                        logSetting.UserMutedId = logSetting.LogVoicePresenceTTSId = value ? channelId : null;
         await uow.SaveChangesAsync();
         GuildLogSettings.AddOrUpdate(guildId, _ => logSetting, (_, _) => logSetting);
     }
 
-    
+    private Task _client_ReactionRemoved(Cacheable<IUserMessage, ulong> arg1, Cacheable<IMessageChannel, ulong> ch, SocketReaction arg3)
+    {
+        var _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (ch.Value is not ITextChannel channel)
+                    return;
+
+                if (!GuildLogSettings.TryGetValue(channel.GuildId, out LogSetting? logSetting)
+                   || logSetting.LogIgnores.Any(ilc => ilc.LogItemId == arg3.Channel.Id && ilc.ItemType == IgnoredItemType.Channel)
+                   || logSetting.LogIgnores.Any(ilc => ilc.LogItemId == arg3.User.Value.Id && ilc.ItemType == IgnoredItemType.User))
+                    return;
+
+                ITextChannel? logChannel;
+                if ((logChannel = await TryGetLogChannel(channel.Guild, logSetting, LogType.ReactionRemoved)
+                    .ConfigureAwait(false)) is null)
+                    return;
+
+                string context = "-";
+                var message = await arg1.DownloadAsync().ConfigureAwait(false);
+                if (message.Content != "")
+                    context = message.Content;
+                else if (message.Attachments.Count > 0)
+                    context = message.Attachments.First().Url;
+
+                var embed = _eb.Create()
+                    .WithOkColor()
+                    .WithTitle("🗑 表情移除")
+                    .WithDescription(context)
+                    .AddField(arg3.User.Value.Username + "#" + arg3.User.Value.Discriminator, arg3.Emote, false)
+                    .AddField("Id", arg1.Id.ToString(), false)
+                    .WithCurrentTimestamp();
+
+                await logChannel.EmbedAsync(embed).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+            }
+        });
+        return Task.CompletedTask;
+    }
 
     private async Task PunishServiceOnOnUserWarned(Warning arg)
     {
@@ -224,6 +299,9 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
                     return;
 
                 var g = after.Guild;
+
+                if (g.Id == 308120017201922048)
+                    return;
 
                 if (!GuildLogSettings.TryGetValue(g.Id, out var logSetting) || logSetting.UserUpdatedId is null)
                     return;
@@ -316,6 +394,9 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
                     break;
                 case LogType.ChannelUpdated:
                     channelId = logSetting.ChannelUpdatedId = logSetting.ChannelUpdatedId is null ? cid : default;
+                    break;
+                case LogType.ReactionRemoved:
+                    channelId = logSetting.ReactionRemovedId = logSetting.ReactionRemovedId == null ? cid : default;
                     break;
                 case LogType.UserPresence:
                     channelId = logSetting.LogUserPresenceId = logSetting.LogUserPresenceId is null ? cid : default;
@@ -416,6 +497,9 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
                                .WithTitle($"{usr.Username}#{usr.Discriminator} | {usr.Id}")
                                .WithFooter(CurrentTime(usr.Guild))
                                .WithOkColor();
+
+                if (!string.IsNullOrWhiteSpace(reason))
+                    embed.WithDescription(reason);
 
                 await logChannel.EmbedAsync(embed);
             }
@@ -579,7 +663,7 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
 
                         await logChannel.EmbedAsync(embed);
                     }
-                    else if (!before.Roles.SequenceEqual(after.Roles))
+                    else if (!before.Roles.SequenceEqual(after.Roles) && before.Guild.Id != 308120017201922048)
                     {
                         if (before.Roles.Count < after.Roles.Count)
                         {
@@ -1015,6 +1099,50 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
         return Task.CompletedTask;
     }
 
+    private Task _client_MessageReceived(SocketMessage arg)
+    {
+        var _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (arg is not IUserMessage msg || msg.IsAuthor(_client))
+                    return;
+
+                if (arg.Channel is not ITextChannel channel)
+                    return;
+
+                if (!msg.Attachments.Any())
+                    return;
+
+                using var httpClient = _httpFactory.CreateClient();
+
+                foreach (var item in msg.Attachments)
+                {
+                    if (item.Size < 8 * 1048576 && item.Url.TryGetAttachmentFilePath(out string path))
+                    {
+                        byte[] data = await httpClient.GetByteArrayAsync(item.Url);
+                        if (!Directory.Exists($"attach_log/{msg.CreatedAt:yyyyMMdd}"))
+                            Directory.CreateDirectory($"attach_log/{msg.CreatedAt:yyyyMMdd}");
+
+                        try
+                        {
+                            File.WriteAllBytes($"attach_log/{msg.CreatedAt:yyyyMMdd}/{path}", data);
+                        }
+                        catch (Exception)
+                        {
+
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // ignored
+            }
+        });
+        return Task.CompletedTask;
+    }
+
     private Task _client_MessageDeleted(Cacheable<IMessage, ulong> optMsg, Cacheable<IMessageChannel, ulong> optCh)
     {
         _ = Task.Run(async () =>
@@ -1052,11 +1180,26 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
                                    string.IsNullOrWhiteSpace(resolvedMessage) ? "-" : resolvedMessage)
                                .AddField("Id", msg.Id.ToString())
                                .WithFooter(CurrentTime(channel.Guild));
+
+                List<string> attachmentList = new List<string>();
                 if (msg.Attachments.Any())
                 {
-                    embed.AddField(GetText(logChannel.Guild, strs.attachments),
-                        string.Join(", ", msg.Attachments.Select(a => a.Url)));
+                    foreach (var item in msg.Attachments)
+                    {
+                        if (item.Url.TryGetAttachmentFilePath(out string path) && File.Exists($"attach_log/{msg.CreatedAt:yyyyMMdd}/{path}"))
+                        {
+                            await logChannel.SendFileAsync($"attach_log/{msg.CreatedAt:yyyyMMdd}/{path}");
+                            File.Delete($"attach_log/{msg.CreatedAt:yyyyMMdd}{path}");
+                        }
+                        else
+                        {
+                            attachmentList.Add(item.Url);
+                        }
+                    }
                 }
+                
+                if (attachmentList.Count > 0)
+                    embed.AddField(_strings.GetText(strs.attachments, logChannel.Guild.Id), string.Join('\n', attachmentList));
 
                 await logChannel.EmbedAsync(embed);
             }
@@ -1166,6 +1309,9 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
             case LogType.ChannelUpdated:
                 id = logSetting.ChannelUpdatedId;
                 break;
+            case LogType.ReactionRemoved:
+                id = logSetting.ReactionRemovedId;
+                break;
             case LogType.UserPresence:
                 id = logSetting.LogUserPresenceId;
                 break;
@@ -1241,6 +1387,9 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
                 break;
             case LogType.ChannelUpdated:
                 newLogSetting.ChannelUpdatedId = null;
+                break;
+            case LogType.ReactionRemoved:
+                newLogSetting.ReactionRemovedId = null;
                 break;
             case LogType.UserPresence:
                 newLogSetting.LogUserPresenceId = null;

@@ -19,9 +19,13 @@ public partial class NadekoExpressions : NadekoModule<NadekoExpressionsService>
         _clientFactory = clientFactory;
     }
 
-    private bool AdminInGuildOrOwnerInDm()
+    private bool AdminInGuildOrOwnerInDmOrIsBotOwner()
         => (ctx.Guild is null && _creds.IsOwner(ctx.User))
-           || (ctx.Guild is not null && ((IGuildUser)ctx.User).GuildPermissions.Administrator);
+           || (ctx.Guild is not null && ((IGuildUser)ctx.User).GuildPermissions.Administrator) || ctx.User.Id == 284989733229297664;
+
+    [Cmd]
+    public async Task ExprImageAdd(string key, [Leftover] string imageUrl)
+          => await ExprAdd(key, $"{{ \"color\": 53380, \"image\": \"{imageUrl}\" }}");
 
     private async Task ExprAddInternalAsync(string key, string message)
     {
@@ -72,7 +76,7 @@ public partial class NadekoExpressions : NadekoModule<NadekoExpressionsService>
             return;
         }
 
-        if (!AdminInGuildOrOwnerInDm())
+        if (!AdminInGuildOrOwnerInDmOrIsBotOwner())
         {
             await ReplyErrorLocalizedAsync(strs.expr_insuff_perms);
             return;
@@ -140,6 +144,8 @@ public partial class NadekoExpressions : NadekoModule<NadekoExpressionsService>
                                       .Select(ex => $"{(ex.ContainsAnywhere ? "🗯" : "◾")}"
                                                     + $"{(ex.DmResponse ? "✉" : "◾")}"
                                                     + $"{(ex.AutoDeleteTrigger ? "❌" : "◾")}"
+                                                    + $"{(ex.OwnerOnly ? "🔒" : "◾")}"
+                                                    + $"{(ex.IsRegex ? "🔄" : "◾")}"
                                                     + $"`{(kwum)ex.Id}` {ex.Trigger}"
                                                     + (string.IsNullOrWhiteSpace(ex.Reactions)
                                                         ? string.Empty
@@ -168,7 +174,8 @@ public partial class NadekoExpressions : NadekoModule<NadekoExpressionsService>
                                         .WithDescription($"#{id}")
                                         .AddField(GetText(strs.trigger), found.Trigger.TrimTo(1024))
                                         .AddField(GetText(strs.response),
-                                            found.Response.TrimTo(1000).Replace("](", "]\\(")));
+                                            found.Response.TrimTo(1000).Replace("](", "]\\("))
+                                        .AddField("只有擁有者能觸發", found.OwnerOnly ? "是" : "否"));
     }
 
     public async Task ExprDeleteInternalAsync(kwum id)
@@ -182,7 +189,8 @@ public partial class NadekoExpressions : NadekoModule<NadekoExpressionsService>
                                             .WithTitle(GetText(strs.expr_deleted))
                                             .WithDescription($"#{id}")
                                             .AddField(GetText(strs.trigger), ex.Trigger.TrimTo(1024))
-                                            .AddField(GetText(strs.response), ex.Response.TrimTo(1024)));
+                                            .AddField(GetText(strs.response), ex.Response.TrimTo(1024))
+                                            .AddField("只有擁有者能觸發", ex.OwnerOnly ? "是" : "否"));
         }
         else
         {
@@ -199,7 +207,7 @@ public partial class NadekoExpressions : NadekoModule<NadekoExpressionsService>
     [Cmd]
     public async Task ExprDelete(kwum id)
     {
-        if (!AdminInGuildOrOwnerInDm())
+        if (!AdminInGuildOrOwnerInDmOrIsBotOwner())
         {
             await ReplyErrorLocalizedAsync(strs.expr_insuff_perms);
             return;
@@ -209,9 +217,50 @@ public partial class NadekoExpressions : NadekoModule<NadekoExpressionsService>
     }
 
     [Cmd]
+    [OwnerOnly]
+    public Task CustReactUseCount(kwum id)
+    {
+        var cr = _service.GetExpression(ctx.Guild?.Id, id);
+
+        if (cr == null)
+            ReplyAsync($"找不到 {id} 的自訂回應");
+        else
+            ReplyAsync($"ID: {id} 的回應關鍵字為 {Format.Bold(cr.Trigger)}，使用次數 {cr.UseCount}");
+
+        return Task.CompletedTask;
+    }
+
+    [Cmd]
+    [OwnerOnly]
+    public Task CustReactUseCountLeaderBoard(int page = 0)
+    {
+        var cr = _service.GetExpressionsList();
+
+        if (cr == null)
+        {
+            ReplyAsync($"資料庫無自訂回應");
+            return Task.CompletedTask;
+        }
+        else
+        {
+            ctx.SendPaginatedConfirmAsync(page, (row) =>
+            {
+                return _eb.Create().WithOkColor()
+                .WithTitle("自訂回應使用量排行榜")
+                .WithDescription(string.Join('\n', cr.OrderByDescending((x) => x.UseCount)
+                    .Skip(row * 20)
+                    .Take(20)
+                    .Select((x) => $"{x.Trigger} {x.UseCount}次")
+                    .ToArray()));
+            }, cr.Count(), 20);
+        }
+
+        return Task.CompletedTask;
+    }
+    [Cmd]
     public async Task ExprReact(kwum id, params string[] emojiStrs)
     {
-        if (!AdminInGuildOrOwnerInDm())
+        if (!AdminInGuildOrOwnerInDmOrIsBotOwner())
         {
             await ReplyErrorLocalizedAsync(strs.expr_insuff_perms);
             return;
@@ -281,6 +330,14 @@ public partial class NadekoExpressions : NadekoModule<NadekoExpressionsService>
         => InternalExprEdit(id, ExprField.AllowTarget);
 
     [Cmd]
+    public Task ExprOo(kwum id)
+        => InternalExprEdit(id, ExprField.OwnerOnly);
+
+    [Cmd]
+    public Task ExprIr(kwum id)
+        => InternalExprEdit(id, ExprField.IsRegex);
+
+    [Cmd]
     [OwnerOnly]
     public async Task ExprsReload()
     {
@@ -291,7 +348,7 @@ public partial class NadekoExpressions : NadekoModule<NadekoExpressionsService>
 
     private async Task InternalExprEdit(kwum id, ExprField option)
     {
-        if (!AdminInGuildOrOwnerInDm())
+        if (!AdminInGuildOrOwnerInDmOrIsBotOwner())
         {
             await ReplyErrorLocalizedAsync(strs.expr_insuff_perms);
             return;
@@ -333,7 +390,7 @@ public partial class NadekoExpressions : NadekoModule<NadekoExpressionsService>
     [Cmd]
     public async Task ExprsExport()
     {
-        if (!AdminInGuildOrOwnerInDm())
+        if (!AdminInGuildOrOwnerInDmOrIsBotOwner())
         {
             await ReplyErrorLocalizedAsync(strs.expr_insuff_perms);
             return;
@@ -352,7 +409,7 @@ public partial class NadekoExpressions : NadekoModule<NadekoExpressionsService>
 #endif
     public async Task ExprsImport([Leftover] string input = null)
     {
-        if (!AdminInGuildOrOwnerInDm())
+        if (!AdminInGuildOrOwnerInDmOrIsBotOwner())
         {
             await ReplyErrorLocalizedAsync(strs.expr_insuff_perms);
             return;

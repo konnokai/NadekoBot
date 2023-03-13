@@ -73,7 +73,7 @@ public partial class Utility
             if (guild.Emotes.Any())
             {
                 embed.AddField(GetText(strs.custom_emojis) + $"({guild.Emotes.Count})",
-                    string.Join(" ", guild.Emotes.Shuffle().Take(20).Select(e => $"{e.Name} {e}")).TrimTo(1020));
+                    string.Join(" ", guild.Emotes.Shuffle().Take(20).Select(e => $"{e}")).TrimTo(1020));
             }
 
             await ctx.Channel.EmbedAsync(embed);
@@ -138,10 +138,8 @@ public partial class Utility
             if (!string.IsNullOrWhiteSpace(user.Nickname))
                 embed.AddField(GetText(strs.nickname), user.Nickname, true);
 
-            var joinedAt = GetJoinedAt(user);
-            
             embed.AddField(GetText(strs.id), user.Id.ToString(), true)
-                 .AddField(GetText(strs.joined_server), $"{joinedAt?.ToString("dd.MM.yyyy HH:mm") ?? "?"}", true)
+                 .AddField(GetText(strs.joined_server), $"{user.JoinedAt?.ToString("dd.MM.yyyy HH:mm") ?? "?"}", true)
                  .AddField(GetText(strs.joined_discord), $"{user.CreatedAt:dd.MM.yyyy HH:mm}", true)
                  .AddField(GetText(strs.roles),
                      $"**({user.RoleIds.Count - 1})** - {string.Join("\n", user.GetRoles().Take(10).Where(r => r.Id != r.Guild.EveryoneRole.Id).Select(r => r.Name)).SanitizeMentions(true)}",
@@ -169,16 +167,26 @@ public partial class Utility
             await ctx.Channel.EmbedAsync(embed);
         }
 
-        private DateTimeOffset? GetJoinedAt(IGuildUser user)
+        [Cmd]
+        [RequireContext(ContextType.DM)]
+        [OwnerOnly]
+        public async Task UserInfo(ulong uId = 0)
         {
-            var joinedAt = user.JoinedAt;
-            if (user.GuildId != 117523346618318850)
-                return joinedAt;
+            var user = _client.GetUser(uId);
 
-            if (user.Id == 351244576092192778)
-                return new DateTimeOffset(2019, 12, 25, 9, 33, 0, TimeSpan.Zero);
+            if (user == null)
+                return;
 
-            return joinedAt;
+            var embed = _eb.Create().WithOkColor()
+                .AddField(GetText(strs.name), $"**{user.Username}**#{user.Discriminator}", true)
+                .AddField(GetText(strs.id), user.Id.ToString(), true)
+                .AddField(GetText(strs.joined_discord), $"{user.CreatedAt:dd.MM.yyyy HH:mm}", true)
+                .AddField("存在的伺服器", string.Join('\n', user.MutualGuilds.Select((x) => x.Name)), true);
+
+            var av = user.RealAvatarUrl();
+            if (av != null && av.IsAbsoluteUri)
+                embed.WithThumbnailUrl(av.ToString());
+            await ctx.Channel.EmbedAsync(embed).ConfigureAwait(false);
         }
 
         [Cmd]

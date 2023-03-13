@@ -417,7 +417,6 @@ public abstract class NadekoContext : DbContext
 
         #endregion
 
-
         #region Patron
 
         // currency rewards

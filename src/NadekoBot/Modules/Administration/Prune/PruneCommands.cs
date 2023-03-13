@@ -65,6 +65,15 @@ public partial class Administration
                 await _service.PruneWhere((ITextChannel)ctx.Channel, count, _ => true, opts.After);
         }
 
+        //prune @user [x] (Only bot owner can use)
+        [Cmd]
+        [RequireContext(ContextType.Guild)]
+        [OwnerOnly]
+        [BotPerm(ChannelPerm.ManageMessages)]
+        [Priority(0)]
+        public Task Prune(IGuildUser user, int count = 100)
+            => Prune(user.Id, count, "");
+
         //prune @user [x]
         [Cmd]
         [RequireContext(ContextType.Guild)]
