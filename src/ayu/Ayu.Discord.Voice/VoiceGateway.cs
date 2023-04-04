@@ -232,23 +232,25 @@ namespace Ayu.Discord.Voice
         {
             Ssrc = ready.Ssrc;
 
-            //Log.Information("Received ready {GuildId}, {Session}, {Token}", guildId, session, token);
+            //Log.Information("Received ready {GuildId}, {Session}, {Token}", /*guildId, session, token*/);
 
             _udpEp = new(IPAddress.Parse(ready.Ip), ready.Port);
 
             var ssrcBytes = BitConverter.GetBytes(Ssrc);
-            var ipDiscoveryData = new byte[70];
-            Buffer.BlockCopy(ssrcBytes, 0, ipDiscoveryData, 0, ssrcBytes.Length);
+            var ipDiscoveryData = new byte[74];
+            ipDiscoveryData[1] = 1;
+            ipDiscoveryData[3] = 70; 
+            Buffer.BlockCopy(ssrcBytes, 0, ipDiscoveryData, 4, ssrcBytes.Length);
             await _udpClient.SendAsync(ipDiscoveryData, ipDiscoveryData.Length, _udpEp);
             while (true)
             {
                 var buffer = _udpClient.Receive(ref _udpEp);
 
-                if (buffer.Length == 70)
+                if (buffer.Length == 74)
                 {
                     //Log.Information("Received IP discovery data.");
 
-                    var myIp = Encoding.UTF8.GetString(buffer, 4, buffer.Length - 8);
+                    var myIp = Encoding.UTF8.GetString(buffer, 8, buffer.Length - 12);
                     MyIp = myIp.TrimEnd('\0');
                     MyPort = BitConverter.ToUInt16(buffer, buffer.Length - 2);
 
