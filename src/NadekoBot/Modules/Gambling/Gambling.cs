@@ -14,6 +14,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 using Nadeko.Econ.Gambling.Rps;
+using NadekoBot.Modules.Administration.Services;
 
 namespace NadekoBot.Modules.Gambling;
 
@@ -30,6 +31,7 @@ public partial class Gambling : GamblingModule<GamblingService>
     private readonly IPatronageService _ps;
     private readonly RemindService _remind;
     private readonly GamblingTxTracker _gamblingTxTracker;
+    private readonly MuteRebornService _muteRebornService;
 
     private IUserMessage rdMsg;
 
@@ -43,7 +45,8 @@ public partial class Gambling : GamblingModule<GamblingService>
         IBankService bank,
         IPatronageService ps,
         RemindService remind,
-        GamblingTxTracker gamblingTxTracker)
+        GamblingTxTracker gamblingTxTracker,
+        MuteRebornService muteRebornService)
         : base(configService)
     {
         _gs = gs;
@@ -60,6 +63,7 @@ public partial class Gambling : GamblingModule<GamblingService>
         _enUsCulture.NumberGroupSeparator = " ";
         _tracker = tracker;
         _configService = configService;
+        _muteRebornService = muteRebornService;
     }
 
     public async Task<string> GetBalanceStringAsync(ulong userId)
@@ -177,6 +181,17 @@ public partial class Gambling : GamblingModule<GamblingService>
         val = (int)(val * (1 + (result.Quota! * 0.01f)));
 
         await _cs.AddAsync(ctx.User.Id, val, new("timely", "claim"));
+
+        try
+        {
+            var addResult = await _muteRebornService.AddRebornTicketNumAsync(ctx.Guild, ctx.User, 1);
+            if (addResult.Item1)
+                await ctx.Channel.SendConfirmAsync(_eb, addResult.Item2);           
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, $"AddMuteRebornError: {ctx.Guild}({ctx.Guild.Id}) - {ctx.User}({ctx.User.Id})");
+        }
 
         var inter = _inter
             .Create(ctx.User.Id,
