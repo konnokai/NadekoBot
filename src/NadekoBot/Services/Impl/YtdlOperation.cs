@@ -11,7 +11,7 @@ public class YtdlOperation
     private readonly string _baseArgString;
     private readonly bool _isYtDlp;
 
-    public YtdlOperation(string baseArgString, bool isYtDlp = false)
+    public YtdlOperation(string baseArgString, bool isYtDlp = true)
     {
         _baseArgString = baseArgString;
         _isYtDlp = isYtDlp;
