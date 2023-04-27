@@ -1108,17 +1108,17 @@ public sealed class LogCommandService : ILogCommandService, IReadyExecutor
                 if (arg is not IUserMessage msg || msg.IsAuthor(_client))
                     return;
 
-                if (arg.Channel is not ITextChannel channel)
+                if (!msg.Attachments.Any())
                     return;
 
-                if (!msg.Attachments.Any())
+                if (arg.Channel is not ITextChannel channel)
                     return;
 
                 using var httpClient = _httpFactory.CreateClient();
 
                 foreach (var item in msg.Attachments)
                 {
-                    if (item.Size < 8 * 1048576 && item.Url.TryGetAttachmentFilePath(out string path))
+                    if (item.Size < 25 * 1048576 && item.Url.TryGetAttachmentFilePath(out string path))
                     {
                         byte[] data = await httpClient.GetByteArrayAsync(item.Url);
                         if (!Directory.Exists($"attach_log/{msg.CreatedAt:yyyyMMdd}"))
